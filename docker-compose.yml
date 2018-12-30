@@ -1,0 +1,129 @@
+version: '3'
+
+services:
+  db:
+    image: mariadb
+    container_name: nextcloud-mariadb
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: unless-stopped
+    volumes:
+      - ./vols/db:/var/lib/mysql
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    env_file:
+      - db.env
+
+  redis:
+    image: redis
+    container_name: nextcloud-redis
+    restart: always
+
+  app:
+    build: ./app
+    restart: unless-stopped
+    container_name: nextcloud-app
+    volumes:
+#      - ./vols/nextcloud:/var/www/html
+      - /mnt/sdd1/data:/var/www/html
+#      - /mnt/sdd1/data:/var/www/nextcloud
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - MYSQL_HOST=db
+      - discovery.type=single-node
+    env_file:
+      - db.env
+    depends_on:
+      - db
+      - redis
+      - letsencrypt-companion
+      - proxy
+    networks:
+      - proxy-tier
+      - default
+  cron:
+    build: ./app
+    container_name: nextcloud-cron
+    restart: unless-stopped
+    volumes:
+#      - ./vols/nextcloud:/var/www/html
+#      - /mnt/sdd1/data:/var/www/nextcloud
+      - /mnt/sdd1/data:/var/www/html
+    entrypoint: /cron.sh
+    depends_on:
+      - db
+      - redis
+
+  proxy:
+    build: ./proxy
+    container_name: nextcloud-proxy
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    labels:
+      com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy: "true"
+    volumes:
+      - ./vols/certs:/etc/nginx/certs:ro
+      - ./vols/vhost.d:/etc/nginx/vhost.d
+      - ./vols/html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    networks:
+      - proxy-tier
+
+  letsencrypt-companion:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    container_name: nextcloud-letsencrypt
+    restart: unless-stopped
+    volumes:
+      - ./vols/certs:/etc/nginx/certs
+      - ./vols/vhost.d:/etc/nginx/vhost.d
+      - ./vols/html:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    networks:
+      - proxy-tier
+    depends_on:
+      - proxy
+  elasticsearch:
+#    image: dsteinkopf/elasticsearch-ingest-attachment
+    build: ./elasticsearchperso
+    image: elasticsearchperso
+#    container_name: nextcloud-elasticsearch
+    container_name: elasticsearch
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      - discovery.type=single-node
+    volumes:
+      - ./vols/elasticsearch_data:/usr/share/elasticsearch/data
+#      - ./vols/es/readonlyrest.yml:/usr/share/elasticsearch/config/readonlyrest.yml
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    networks:
+      - proxy-tier
+  kibana:
+    image: 'docker.elastic.co/kibana/kibana:6.2.4'
+    container_name: kibana
+    environment:
+      SERVER_NAME: kibana.local
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - 5601:5601
+    networks:
+      - proxy-tier
+
+
+networks:
+  proxy-tier:
+
+

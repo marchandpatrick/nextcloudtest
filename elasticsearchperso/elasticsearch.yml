@@ -1,0 +1,17 @@
+cluster.name: "cloud1"
+network.host: 0.0.0.0
+
+# minimum_master_nodes need to be explicitly set when bound on a public IP
+# set to 1 to allow single node clusters
+# Details: https://github.com/elastic/elasticsearch/pull/17288
+discovery.zen.minimum_master_nodes: 1
+#xpack.license.self_generated.type: basic
+# https://stackoverflow.com/questions/35526532/how-to-add-an-elasticsearch-index-during-docker-build
+#es.path.data: /data
+xpack.security.enabled: false
+#path.data: /data
+discovery.type: single-node
+
+
+
+
